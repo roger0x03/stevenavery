@@ -1,0 +1,9 @@
+- read in text
+- classify documents and extract meta data
+- paint up the proof of principals
+
+
+Install Tesseract:
+http://benschmidt.org/dighist13/?page_id=129
+
+cat texts/*/* > everything.txt
