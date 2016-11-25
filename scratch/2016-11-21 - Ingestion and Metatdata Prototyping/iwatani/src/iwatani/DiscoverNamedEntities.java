@@ -235,6 +235,7 @@ public class DiscoverNamedEntities {
             for( String pattern : patterns ) {
                 if( patternToCount.containsKey( pattern ) ) {
                     writer.write( name + "," + pattern );
+                    writer.newLine( );
                 }
             }
         }
