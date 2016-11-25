@@ -24,9 +24,11 @@ if [ ! -f images/$filename/scan_1.tif ]; #Only redo the ghostscript if the file 
 then
     if [ -f pdfs/$filename.pdf ]
     then
-        gs -dNOPAUSE -dBATCH -sDEVICE=tiffg4 -sOutputFile=images/$filename/scan_%d.tif pdfs/$filename.pdf
+    	gs -dNOPAUSE -dBATCH -sDEVICE=pnggray -sOutputFile=images/$filename/scan_%d.png pdfs/$filename.pdf
+        #gs -dNOPAUSE -dBATCH -sDEVICE=tiffg4 -sOutputFile=images/$filename/scan_%d.tif pdfs/$filename.pdf
     else
-        gs -dNOPAUSE -dBATCH -sDEVICE=tiffg4 -sOutputFile=images/$filename/scan_%d.tif $filename.pdf
+    	gs -dNOPAUSE -dBATCH -sDEVICE=pnggray -sOutputFile=images/$filename/scan_%d.png $filename.pdf
+        #gs -dNOPAUSE -dBATCH -sDEVICE=tiffg4 -sOutputFile=images/$filename/scan_%d.tif $filename.pdf
     fi
 fi
 
@@ -39,7 +41,8 @@ do
     then
         if [ ! -e texts/$filename/$i.txt ] #now doesn't overwrite
         then
-            tesseract images/$filename/scan_$i.tif texts/$filename/$i
+        	tesseract images/$filename/scan_$i.png texts/$filename/$i
+            #tesseract images/$filename/scan_$i.tif texts/$filename/$i
         #add the text to the result.txt file
         fi
         i=$(( $i + 1 ))

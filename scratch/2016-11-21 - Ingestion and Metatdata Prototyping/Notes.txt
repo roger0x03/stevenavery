@@ -13,3 +13,9 @@ cat texts/*/* > everything.txt
 - Document type classification - trial transcript, interviews, verdict, etc.
 - Dates - document creation & contents
 - Topic of shorter documents?
+
+Code to manipulate images
+http://www.imagemagick.org/script/binary-releases.php#macosx
+http://www.imagemagick.org/script/command-line-processing.php
+
+Know we can do things to improve the output of tesseract.
