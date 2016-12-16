@@ -63,11 +63,14 @@ public class DiscoverDatesAndTimesUsingAnnotation {
         }
         
         //  Run in single thread
-        boolean runInSingleThread = false;
+        boolean runInSingleThread = true;
         if( runInSingleThread ) {
             for( int i = 0 ; i < folders.size( ) ; i++ ) {
-                System.out.println( "Process " + folders.get( i ).getName( ) + 
+                File thisFolder = folders.get( i );
+                System.out.println( "Process " + thisFolder.getName( ) + 
                         ". (" + ( i + 1 ) + "/" + folders.size( ) + ")" );
+                if( thisFolder.getName( ).startsWith( "." ) ) { continue; }
+                if( ! thisFolder.isDirectory( ) ) { continue; }
                 TimeAnnotater.annotate( folders.get( i ) );
             }
         }

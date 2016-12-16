@@ -9,6 +9,8 @@
 package iwatani;
 
 
+import edu.stanford.nlp.ling.CoreAnnotations;
+import edu.stanford.nlp.ling.CoreLabel;
 import edu.stanford.nlp.pipeline.Annotation;
 import edu.stanford.nlp.pipeline.AnnotationPipeline;
 import edu.stanford.nlp.pipeline.POSTaggerAnnotator;
@@ -17,6 +19,7 @@ import edu.stanford.nlp.pipeline.WordsToSentencesAnnotator;
 import edu.stanford.nlp.time.TimeAnnotations;
 import edu.stanford.nlp.time.TimeAnnotator;
 import edu.stanford.nlp.time.TimeExpression;
+import edu.stanford.nlp.trees.Tree;
 import edu.stanford.nlp.util.CoreMap;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -30,6 +33,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 
@@ -106,7 +110,7 @@ public class TimeAnnotater {
         pipeline.addAnnotator( new TokenizerAnnotator( false ) );
         pipeline.addAnnotator( new WordsToSentencesAnnotator( false ) );
         pipeline.addAnnotator( new POSTaggerAnnotator( false ) );
-        String annotationRuleFolder = "/Users/dustingarvey/Documents/B/Bodamer Roger/stevenavery/scratch/2016-11-21 - Ingestion and Metatdata Prototyping/stanford-corenlp-full-2016-10-31/sutime";
+        String annotationRuleFolder = "/Users/dustingarvey/Documents/B/Bodamer Roger/libs/stanford-corenlp-full-2016-10-31/sutime";
         pipeline.addAnnotator( new TimeAnnotator( annotationRuleFolder, new Properties( ) ) );
         
         //  Load all the document text
@@ -140,13 +144,41 @@ public class TimeAnnotater {
         //  Get the time annotations
         String text = builder.toString( );
         Set< String > patterns = new HashSet( );
+        Set< String > actuals = new HashSet( );
         Annotation annotation = new Annotation( text );
         pipeline.annotate( annotation );
         List< CoreMap > timeAnnotations = annotation.get( TimeAnnotations.TimexAnnotations.class );
         for( CoreMap timeAnnotation : timeAnnotations ) {
-            String context = timeAnnotation.toString( );
+            String actual = timeAnnotation.toString( );
             String label = timeAnnotation.get( TimeExpression.Annotation.class ).getTemporal( ).toString( );
-            patterns.add( context + "," + label );
+            patterns.add( actual + "," + label );
+            actuals.add( actual );
+        }
+        
+        //  Print out the sentances that contain the contexts
+        Map< String, List< String > > actualToSentences = new HashMap( );
+        for( CoreMap sentenceAnnotation : annotation.get( CoreAnnotations.SentencesAnnotation.class ) ) {
+            String sentence = sentenceAnnotation.toString( );
+            for( String actual : actuals ) {
+                if( sentence.contains( actual ) ) {
+                    List< String > sentences = actualToSentences.get( actual );
+                    if( sentences != null ) { 
+                        sentences.add( sentence );
+                    } else {
+                        sentences = new ArrayList( );
+                        sentences.add( sentence );
+                        actualToSentences.put( actual, sentences );
+                    }
+                }
+            }
+        }
+        
+        //  Print the result
+        System.out.println( "Actual,Sentence" );
+        for( Entry< String, List< String > > entry : actualToSentences.entrySet( ) ) {
+            for( String sentence : entry.getValue( ) ) {
+                System.out.println( entry.getKey( ) + "-" + sentence );
+            }
         }
 
         //  Save the patterns and update the counts
