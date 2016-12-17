@@ -155,29 +155,35 @@ public class TimeAnnotater {
             actuals.add( actual );
         }
         
-        //  Print out the sentances that contain the contexts
-        Map< String, List< String > > actualToSentences = new HashMap( );
+        //  Unpack the sentences
+        List< String > sentences = new ArrayList( );
         for( CoreMap sentenceAnnotation : annotation.get( CoreAnnotations.SentencesAnnotation.class ) ) {
             String sentence = sentenceAnnotation.toString( );
-            for( String actual : actuals ) {
-                if( sentence.contains( actual ) ) {
-                    List< String > sentences = actualToSentences.get( actual );
-                    if( sentences != null ) { 
-                        sentences.add( sentence );
-                    } else {
-                        sentences = new ArrayList( );
-                        sentences.add( sentence );
-                        actualToSentences.put( actual, sentences );
-                    }
-                }
-            }
+            sentences.add( sentence );
         }
         
-        //  Print the result
-        System.out.println( "Actual,Sentence" );
-        for( Entry< String, List< String > > entry : actualToSentences.entrySet( ) ) {
-            for( String sentence : entry.getValue( ) ) {
-                System.out.println( entry.getKey( ) + "-" + sentence );
+        //  Collect all of the sentences that surround times
+        Map< String, List< String > > actualToSentences = new HashMap( );
+        for( int i = 0 ; i < sentences.size( ) ; i++ ) {
+            String sentence = sentences.get( i );
+            for( String actual : actuals ) {
+                if( sentence.contains( actual ) ) {
+                    
+                    //  Get the list of sentences associated with this tag
+                    List< String > context = actualToSentences.get( actual );
+                    if( context == null ) { 
+                        context = new ArrayList( );
+                        actualToSentences.put( actual, context );
+                    }
+                    
+                    //  Add the sentences before, at and after the sentence
+                    try { context.add( sentences.get( i - 2 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
+                    try { context.add( sentences.get( i - 1 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
+                    context.add( sentence.replace( ",", " " ) );
+                    try { context.add( sentences.get( i + 1 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
+                    try { context.add( sentences.get( i + 2 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
+                    
+                }
             }
         }
 
@@ -195,11 +201,24 @@ public class TimeAnnotater {
         //  Write the results
         File file = new File( folder, "TimeAnnotations.log" );
         BufferedWriter writer = new BufferedWriter( new FileWriter( file ) );
-        writer.write( "Context,Annotation" );
+        writer.write( "Actual,Annotation" );
         writer.newLine( );
         for( String pattern : patterns ) {
             writer.write( pattern );
             writer.newLine( );
+        }
+        writer.close( );
+        
+        //  Write the text surrounding an annotation
+        file = new File( folder, "Context.csv" );
+        writer = new BufferedWriter( new FileWriter( file ) );
+        writer.write( "Actual,Sentence" );
+        writer.newLine( );
+        for( Entry< String, List< String > > entry : actualToSentences.entrySet( ) ) {
+            for( String sentence : entry.getValue( ) ) {
+                writer.write( entry.getKey( ) + "," + sentence );
+                writer.newLine( );
+            }
         }
         writer.close( );
         

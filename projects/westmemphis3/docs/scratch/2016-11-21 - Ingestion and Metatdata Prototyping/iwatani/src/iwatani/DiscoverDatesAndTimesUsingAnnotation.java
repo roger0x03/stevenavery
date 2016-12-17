@@ -63,7 +63,7 @@ public class DiscoverDatesAndTimesUsingAnnotation {
         }
         
         //  Run in single thread
-        boolean runInSingleThread = true;
+        boolean runInSingleThread = false;
         if( runInSingleThread ) {
             for( int i = 0 ; i < folders.size( ) ; i++ ) {
                 File thisFolder = folders.get( i );
