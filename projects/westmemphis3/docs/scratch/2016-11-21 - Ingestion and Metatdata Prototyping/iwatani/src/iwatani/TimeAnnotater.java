@@ -130,7 +130,8 @@ public class TimeAnnotater {
             StringBuilder fileBuilder = new StringBuilder( );
             String line = reader.readLine( );
             while( line != null ) {
-                fileBuilder.append( line );
+                line = line.replace( ".", ". " );
+                fileBuilder.append( line ).append( " " );
                 line = reader.readLine( );
             }
             reader.close( );
@@ -151,7 +152,7 @@ public class TimeAnnotater {
         for( CoreMap timeAnnotation : timeAnnotations ) {
             String actual = timeAnnotation.toString( );
             String label = timeAnnotation.get( TimeExpression.Annotation.class ).getTemporal( ).toString( );
-            patterns.add( actual + "," + label );
+            patterns.add( "\"" + actual + "\",\"" + label + "\"" );
             actuals.add( actual );
         }
         
@@ -177,11 +178,11 @@ public class TimeAnnotater {
                     }
                     
                     //  Add the sentences before, at and after the sentence
-                    try { context.add( sentences.get( i - 2 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
+                    //try { context.add( sentences.get( i - 2 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
                     try { context.add( sentences.get( i - 1 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
                     context.add( sentence.replace( ",", " " ) );
                     try { context.add( sentences.get( i + 1 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
-                    try { context.add( sentences.get( i + 2 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
+                    //try { context.add( sentences.get( i + 2 ).replace( ",", " " ) ); } catch( IndexOutOfBoundsException exception ) {}
                     
                 }
             }
@@ -212,11 +213,11 @@ public class TimeAnnotater {
         //  Write the text surrounding an annotation
         file = new File( folder, "Context.csv" );
         writer = new BufferedWriter( new FileWriter( file ) );
-        writer.write( "Actual,Sentence" );
+        writer.write( "\"Actual\",\"Sentence\"" );
         writer.newLine( );
         for( Entry< String, List< String > > entry : actualToSentences.entrySet( ) ) {
             for( String sentence : entry.getValue( ) ) {
-                writer.write( entry.getKey( ) + "," + sentence );
+                writer.write( "\"" + entry.getKey( ) + "\",\"" + sentence + "\"" );
                 writer.newLine( );
             }
         }

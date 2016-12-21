@@ -86,7 +86,7 @@ public class DiscoverNamedEntities {
                 StringBuilder fileBuilder = new StringBuilder( );
                 String line = reader.readLine( );
                 while( line != null ) {
-                    fileBuilder.append( line );
+                    fileBuilder.append( line ).append( " " );
                     line = reader.readLine( );
                 }
                 reader.close( );
