@@ -9,6 +9,17 @@
 package iwatani;
 
 
+import edu.stanford.nlp.ling.CoreAnnotations;
+import edu.stanford.nlp.ling.CoreAnnotations.PartOfSpeechAnnotation;
+import edu.stanford.nlp.ling.CoreAnnotations.TextAnnotation;
+import edu.stanford.nlp.ling.CoreAnnotations.TokensAnnotation;
+import edu.stanford.nlp.ling.CoreLabel;
+import edu.stanford.nlp.pipeline.Annotation;
+import edu.stanford.nlp.pipeline.AnnotationPipeline;
+import edu.stanford.nlp.pipeline.POSTaggerAnnotator;
+import edu.stanford.nlp.pipeline.TokenizerAnnotator;
+import edu.stanford.nlp.pipeline.WordsToSentencesAnnotator;
+import edu.stanford.nlp.util.CoreMap;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -33,8 +44,7 @@ public class CollectTimeAnnotations {
     public static void main( String[] arguments ) throws Exception {
         
         //  Look at each file
-        Map< String, Integer > annotationToCount = new HashMap( );
-        Map< String, Set< String > > annotationToActuals = new HashMap( );
+        Map< String, Set< String > > annotationToRawTimes = new HashMap( );
         Map< String, Set< String > > fileToAnnotations = new HashMap( );
         File root = new File( "/Users/dustingarvey/Documents/B/Bodamer Roger/stevenavery-output/texts" );
         File[] folders = root.listFiles( );
@@ -42,6 +52,7 @@ public class CollectTimeAnnotations {
             if( ! folder.isDirectory( ) ) { continue; }
             File file = new File( folder, "TimeAnnotations.log" );
             if( ! file.exists( ) ) { continue; }
+            if( skipFolder( folder ) ) { continue; } // skip certain folders
             System.out.println( "Processing \"" + folder.getName( ) + "\"." );
             BufferedReader reader = new BufferedReader( new FileReader( file ) );
             String line = reader.readLine( );
@@ -108,14 +119,6 @@ public class CollectTimeAnnotations {
                     continue; 
                 }
 
-                //  Update the count
-                Integer count = annotationToCount.get( annotation );
-                if( count != null ) {
-                    annotationToCount.put( annotation, count + 1 );
-                } else {
-                    annotationToCount.put( annotation, 1 );
-                }
-
                 //  Save the annotation and the file
                 String filename = folder.getName( );
                 Set< String > annotations = fileToAnnotations.get( filename );
@@ -126,8 +129,8 @@ public class CollectTimeAnnotations {
                 annotations.add( annotation );
                 
                 //  Save the actual
-                Set< String > actuals = annotationToActuals.get( annotation );
-                if( actuals == null ) { actuals = new HashSet( ); annotationToActuals.put( annotation, actuals ); }
+                Set< String > actuals = annotationToRawTimes.get( annotation );
+                if( actuals == null ) { actuals = new HashSet( ); annotationToRawTimes.put( annotation, actuals ); }
                 actuals.add( elements[ 0 ] );
                 
                 //  Read the next line
@@ -137,20 +140,9 @@ public class CollectTimeAnnotations {
                 
         }
         
-        //  Write the results
-        File file = new File( root, "0DateTimeAnnotationCounts.csv" );
-        BufferedWriter writer = new BufferedWriter( new FileWriter( file ) );
-        writer.write( "Annotation,Count" );
-        writer.newLine( );
-        for( Entry< String, Integer > entry : annotationToCount.entrySet( ) ) {
-            writer.write( entry.getKey( ) + "," + entry.getValue( ) );
-            writer.newLine( );
-        }
-        writer.close( );
-        
         //  Write the file contents
-        file = new File( root, "0DateTimesContainedInEachFile.csv" );
-        writer = new BufferedWriter( new FileWriter( file ) );
+        File file = new File( root, "0DateTimesContainedInEachFile.csv" );
+        BufferedWriter writer = new BufferedWriter( new FileWriter( file ) );
         writer.write( "File,DateTime" );
         writer.newLine( );
         for( Entry< String, Set< String > > entry : fileToAnnotations.entrySet( ) ) {
@@ -162,37 +154,21 @@ public class CollectTimeAnnotations {
         }
         writer.close( );
         
-        //  Write the annotations related to each segement of actual text
-        file = new File( root, "0DateTimesToActualText.csv" );
-        writer = new BufferedWriter( new FileWriter( file ) );
-        writer.write( "Actual,DateTime" );
-        writer.newLine( );
-        for( Entry< String, Set< String > > entry : annotationToActuals.entrySet( ) ) {
+        //  Unpack the annotations
+        Map< String, String > rawTimeToAnnotation = new HashMap( );
+        for( Entry< String, Set< String > > entry : annotationToRawTimes.entrySet( ) ) {
             String annotation = entry.getKey( );
             for( String actual : entry.getValue( ) ) {
-                writer.write( "\"" + actual + "\",\"" + annotation + "\"" );
-                writer.newLine( );
-            }
-        }
-        writer.close( );
-        
-        //  Unpack the annotatios
-        Map< String, String > actualToAnnotation = new HashMap( );
-        for( Entry< String, Set< String > > entry : annotationToActuals.entrySet( ) ) {
-            String annotation = entry.getKey( );
-            for( String actual : entry.getValue( ) ) {
-                actualToAnnotation.put( actual, annotation );
+                rawTimeToAnnotation.put( actual, annotation );
             }
         }
         
-        //  Write the context for each time annotation
-        Map< String, String > timeToContent = new HashMap( );
-        file = new File( root, "0DateTimesContexts.csv" );
-        writer = new BufferedWriter( new FileWriter( file ) );
-        writer.write( "Folder,Annotation,Context"  );
-        writer.newLine( );
+        //  Get the content surrounding each time
+        Map< String, String > rawTimeToContent = new HashMap( );
+        Map< String, String > rawTimeToFolder = new HashMap( ); // expect this to not be robust
         for( File folder : folders ) {
             if( ! folder.isDirectory( ) ) { continue; }
+            if( skipFolder( folder ) ) { continue; } // skip certain folders
             file = new File( folder, "Context.csv" );
             if( ! file.exists( ) ) { continue; }
             System.out.println( "Extracting context for times in \"" + folder.getName( ) + "\"." );
@@ -200,22 +176,20 @@ public class CollectTimeAnnotations {
             String line = reader.readLine( );
             while( line != null ) {
                 String[] elements = parse( line );
-                String annotation = actualToAnnotation.get( elements[ 0 ] );
+                String rawTime = elements[ 0 ];
+                String annotation = rawTimeToAnnotation.get( rawTime );
                 if( annotation != null ) {
                     
-                    //  Write the result
-                    String context = elements[ 1 ].replace( "\n", " " );
-                    writer.write( "\"" + folder.getName( ) + "\",\"" + 
-                            annotation + "\",\"" + context + "\"");
-                    writer.newLine( );
-                    
-                    //  Save the result
-                    String content = timeToContent.get( annotation );
-                    if( content != null ) { 
-                        content = content + " " + context;
-                        timeToContent.put( annotation, content );
+                    //  Save the context
+                    String contentElement = elements[ 1 ].replace( "\n", " " );
+                    String content = rawTimeToContent.get( rawTime );
+                    if( content != null ) {
+                        content = content + " " + contentElement;
+                        rawTimeToContent.put( rawTime, content );
+                        rawTimeToFolder.put( rawTime, folder.getName( ) );
                     } else {
-                        timeToContent.put( annotation, context );
+                        rawTimeToContent.put( rawTime, contentElement );
+                        rawTimeToFolder.put( rawTime, folder.getName( ) );
                     }
                     
                 }
@@ -223,7 +197,6 @@ public class CollectTimeAnnotations {
             }
             reader.close( );
         }
-        writer.close( );
         
         //  Read in the named entities
         file = new File( root, "0NamedEntitiesContainedInEachFile.csv" );
@@ -242,15 +215,13 @@ public class CollectTimeAnnotations {
         }
         reader.close( );
         
-        //  Create the fact contents by getting all of the named entities 
-        //  in the lines with the content
-        Map< String, String > factComponentsToContent = new HashMap( );
+        //  Initialize the facts
+        List< Fact > facts = new ArrayList( );
         int index = 0;
-        for( Entry< String, String > entry : timeToContent.entrySet( ) ) {
+        for( Entry< String, String > entry : rawTimeToContent.entrySet( ) ) {
             index++;
             System.out.println( "Creating fact components for time " + index + 
-                    " of " + timeToContent.size( ) + "." );
-            String factComponents = entry.getKey( ) + "-";
+                    " of " + rawTimeToContent.size( ) + "." );
             String content = entry.getValue( ).toLowerCase( );
             boolean hasPerson = false;
             boolean hasLocation = false;
@@ -260,26 +231,41 @@ public class CollectTimeAnnotations {
                     numComponents++;
                     hasPerson = hasPerson || entityToCategory.get( entity ).equals( "person" );
                     hasLocation = hasLocation || entityToCategory.get( entity ).equals( "location" );
-                    factComponents = factComponents + entity + "-";
                 }
             }
             boolean relatedToSA = ( content.contains( "steven" ) || content.contains( "avery" ) );
             if( hasPerson && relatedToSA ) {
-                factComponents = factComponents.substring( 0, factComponents.length( ) - 1 );
-                factComponentsToContent.put( factComponents, entry.getValue( ) );
+                Fact fact = new Fact( );
+                String rawTime = entry.getKey( );
+                fact.folder = rawTimeToFolder.get( rawTime );
+                fact.rawTime = rawTime;
+                fact.time = rawTimeToAnnotation.get( rawTime );
+                fact.content = entry.getValue( );
+                facts.add( fact );
             }
         }
         
-        //  Write the fact elements
-        file = new File( root, "0FactComponetsToContent.csv" );
-        writer = new BufferedWriter( new FileWriter( file ) );
-        writer.write( "\"FactComponents\",\"Content\"" );
-        writer.newLine( );
-        for( Entry< String, String > entry : factComponentsToContent.entrySet( ) ) {
-            writer.write( "\"" + entry.getKey( ) + "\",\"" + entry.getValue( ) + "\"" );
-            writer.newLine( );
+        //  Initialize the pipeline 
+        AnnotationPipeline pipeline = new AnnotationPipeline( );
+        pipeline.addAnnotator( new TokenizerAnnotator( false ) );
+        pipeline.addAnnotator( new WordsToSentencesAnnotator( false ) );
+        pipeline.addAnnotator( new POSTaggerAnnotator( false ) );
+        
+        //  Have a go at creating facts 
+        for( int i = 0 ; i < facts.size( ) ; i++ ) {
+            System.out.println( "Having a go a creating fact " + ( i + 1 ) + 
+                    " of " + facts.size( ) + "." );
+            Fact fact = facts.get( i );
+            Annotation annotation = new Annotation( fact.content );
+            pipeline.annotate( annotation );
+            for( CoreMap sentence : annotation.get( CoreAnnotations.SentencesAnnotation.class ) ) {
+                for (CoreLabel token: sentence.get( TokensAnnotation.class ) ) {
+                    String word = token.get( TextAnnotation.class );
+                    String pos = token.get( PartOfSpeechAnnotation.class );
+                    System.out.println( "Fact " + ( i + 1 ) + ": word = " + word + ", pos = " + pos );
+                }
+            }
         }
-        writer.close( );
         
     }
     
@@ -302,6 +288,14 @@ public class CollectTimeAnnotations {
             }
         }
         return line.split( "," );
+    }
+    
+    
+    /** Returns true if we should skip some folders. */
+    private static boolean skipFolder( File folder ) {
+        if( folder.getName( ).startsWith( "jurytrial-Jury-Trial" ) ) { return false; }
+        if( folder.getName( ).startsWith( "interviews" ) ) { return false; }
+        return true;
     }
 
     
