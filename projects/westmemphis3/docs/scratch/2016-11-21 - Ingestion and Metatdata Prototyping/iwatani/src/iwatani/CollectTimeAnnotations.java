@@ -41,6 +41,12 @@ import java.util.Set;
 public class CollectTimeAnnotations {
     
     
+    
+    
+    //  PUBLIC METHODS
+    
+    
+    /** Collect the times. */
     public static void main( String[] arguments ) throws Exception {
         
         //  Look at each file
@@ -215,6 +221,18 @@ public class CollectTimeAnnotations {
         }
         reader.close( );
         
+        //  Get the people
+        Set< String > allPeople = new HashSet( );
+        for( Entry< String, String > entry : entityToCategory.entrySet( ) ) {
+            if( entry.getValue( ).equals( "person" ) ) {
+                if( entry.getKey( ).equals( "you" ) ) { continue; }
+                if( entry.getKey( ).equals( "was" ) ) { continue; }
+                if( entry.getKey( ).equals( "did" ) ) { continue; }
+                if( entry.getKey( ).equals( "she" ) ) { continue; }
+                allPeople.add( entry.getKey( ) );
+            }
+        }
+        
         //  Initialize the facts
         List< Fact > facts = new ArrayList( );
         int index = 0;
@@ -253,17 +271,127 @@ public class CollectTimeAnnotations {
         
         //  Have a go at creating facts 
         for( int i = 0 ; i < facts.size( ) ; i++ ) {
+            
+            //  Print the progress
             System.out.println( "Having a go a creating fact " + ( i + 1 ) + 
                     " of " + facts.size( ) + "." );
+            
+            //  Get the text for the time element
             Fact fact = facts.get( i );
-            Annotation annotation = new Annotation( fact.content );
+            Annotation annotation = new Annotation( fact.rawTime );
             pipeline.annotate( annotation );
+            List< String > timeWords = new ArrayList( );
             for( CoreMap sentence : annotation.get( CoreAnnotations.SentencesAnnotation.class ) ) {
-                for (CoreLabel token: sentence.get( TokensAnnotation.class ) ) {
+                for( CoreLabel token: sentence.get( TokensAnnotation.class ) ) {
                     String word = token.get( TextAnnotation.class );
-                    String pos = token.get( PartOfSpeechAnnotation.class );
-                    System.out.println( "Fact " + ( i + 1 ) + ": word = " + word + ", pos = " + pos );
+                    timeWords.add( word );
                 }
+            }
+            
+            //  Get the words organized by sentences
+            annotation = new Annotation( fact.content );
+            pipeline.annotate( annotation );
+            List< List< String > > sentenceWords = new ArrayList( );
+            List< List< String > > sentencePOSs = new ArrayList( );
+            for( CoreMap sentence : annotation.get( CoreAnnotations.SentencesAnnotation.class ) ) {
+                List< String > words = new ArrayList( );
+                sentenceWords.add( words );
+                List< String > poss = new ArrayList( );
+                sentencePOSs.add( poss );
+                for( CoreLabel token: sentence.get( TokensAnnotation.class ) ) {
+                    String word = token.get( TextAnnotation.class );
+                    words.add( word );
+                    String pos = token.get( PartOfSpeechAnnotation.class );
+                    poss.add( pos );
+                }
+            }
+            
+            //  Find the sentence with the time
+            int sentenceWithTime = -1;
+            for( int j = 0 ; j < sentenceWords.size( ) ; j++ ) {
+                List< String > words = sentenceWords.get( j );
+                boolean foundIt = contains( words, timeWords );
+                if( foundIt ) {
+                    sentenceWithTime = j; 
+                    break;
+                }
+            }
+            
+            //  We didn't find the time
+            if( sentenceWithTime == -1 ) {
+                System.out.println( "We are missing the time." );
+                continue;
+            }
+            
+            //  Get the times and words
+            List< String > words = sentenceWords.get( sentenceWithTime );
+            List< String > poss = sentencePOSs.get( sentenceWithTime );
+            if( words.size( ) > 100 ) { continue; }
+            
+            //  Find the preposition
+            List< String > prepositions = new ArrayList( );
+            List< Integer > prepositionIndices = new ArrayList( );
+            for( int j = 0 ; j < words.size( ) ; j++ ) {
+                if( poss.get( j ).equals( "IN" ) ) {
+                    if( timeWords.contains( words.get( j ) ) ) { continue; }
+                    if( words.get( j ).toLowerCase( ).equals( "of" ) ) { continue; }
+                    prepositionIndices.add( j );
+                    prepositions.add( words.get( j ).toLowerCase( ) );
+                }
+            }
+            
+            //  Find the nouns
+            List< String > nouns = new ArrayList( );
+            List< Integer > nounIndices = new ArrayList( );
+            for( int j = 0 ; j < words.size( ) ; j++ ) {
+                if( poss.get( j ).equals( "NN" ) || poss.get( j ).equals( "NNS" ) ) {
+                    if( timeWords.contains( words.get( j ) ) ) { continue; }
+                    nouns.add( words.get( j ).toLowerCase( ) );
+                    nounIndices.add( j );
+                }
+            }
+            
+            //  Find the verbs
+            List< String > verbs = new ArrayList( );
+            List< Integer > verbIndices = new ArrayList( );
+            for( int j = 0 ; j < words.size( ) ; j++ ) {
+                if( poss.get( j ).equals( "VB" ) || poss.get( j ).equals( "VBD" ) ) {
+                    if( timeWords.contains( words.get( j ) ) ) { continue; }
+                    verbs.add( words.get( j ).toLowerCase( ) );
+                    verbIndices.add( j );
+                }
+            }
+            
+            //  Find the people
+            List< String > people = new ArrayList( );
+            List< Integer > personIndices = new ArrayList( );
+            for( int j = 0 ; j < words.size( ) ; j++ ) {
+                if( allPeople.contains( words.get( j ).toLowerCase( ) ) ) {
+                    people.add( words.get( j ).toLowerCase( ) );
+                    personIndices.add( j );
+                }
+            }
+            
+            //  Only consider the simple ones
+            if( ( people.size( ) != 1 ) && ( people.size( ) != 2 ) ) { continue; }
+            if( prepositions.size( ) != 1 ) { continue; }
+            if( nouns.size( ) == 0 ) { continue; }
+            if( verbs.size( ) == 0 ) { continue; }
+            
+            //  Pack up the fact
+            String value = people.get( 0 );
+            if( people.size( ) == 2 ) { value = value + "," + people.get( 1 ); }
+            value = value + ":" + prepositions.get( 0 ) + ":" + verbs.get( 0 ) + ":" + nouns.get( 0 ) + ":" + fact.time;
+            fact.fact = value;
+            System.out.println( "\"" + fact.fact + "\" from \"" + fact.content + "\"" );
+            
+        }
+        
+        //  Print out he facts
+        System.out.println( "FACTS:" );
+        for( Fact fact : facts ) {
+            if( fact.fact != null ) {
+                System.out.println( "\"" + fact.fact + "\" from \"" + fact.content + "\"" );
             }
         }
         
@@ -273,6 +401,40 @@ public class CollectTimeAnnotations {
     
     
     //  PRIVATE METHODS
+    
+    
+    /** Returns true if the first list contains the second list. */
+    private static boolean contains( List< String > list1, 
+            List< String > list2 ) {
+        
+        //  Not possible
+        if( list2.size( ) > list1.size( ) ) {
+            return false;
+        }
+        
+        //  Find the second list in the first one
+        int n1 = list1.size( );
+        int n2 = list2.size( );
+        for( int i = 0 ; i < ( n1 - n2 ) ; i++ ) {
+            
+            //  See if we have all match
+            boolean allMatch = true;
+            for( int j = 0 ; j < n2 ; j++ ) {
+                allMatch = allMatch && ( list2.get( j ).equals( list1.get( i + j ) ) );
+            }
+            
+            //  We found it, return true
+            if( allMatch ) {
+                return true;
+            }
+            
+        }
+        
+        //  Return false if we didn't find it
+        return false;
+        
+        
+    }
     
     
     /** Parses the input line. */
