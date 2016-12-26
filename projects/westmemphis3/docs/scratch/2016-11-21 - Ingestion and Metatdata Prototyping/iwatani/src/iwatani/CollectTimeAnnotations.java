@@ -270,6 +270,7 @@ public class CollectTimeAnnotations {
         pipeline.addAnnotator( new POSTaggerAnnotator( false ) );
         
         //  Have a go at creating facts 
+        //System.out.println( "Fact,Word,POS,RawTime" );
         for( int i = 0 ; i < facts.size( ) ; i++ ) {
             
             //  Print the progress
@@ -306,6 +307,16 @@ public class CollectTimeAnnotations {
                 }
             }
             
+            //  Skip this one if we have a sentence that is weirdly long
+            boolean skipIt = false;
+            for( int j = 0 ; j < sentenceWords.size( ) ; j++ ) {
+                if( sentenceWords.get( j ).size( ) > 100 ) {
+                    skipIt = true;
+                    break;
+                }
+            }
+            if( skipIt ) { continue; }
+            
             //  Find the sentence with the time
             int sentenceWithTime = -1;
             for( int j = 0 ; j < sentenceWords.size( ) ; j++ ) {
@@ -319,80 +330,71 @@ public class CollectTimeAnnotations {
             
             //  We didn't find the time
             if( sentenceWithTime == -1 ) {
-                System.out.println( "We are missing the time." );
+                //System.out.println( "We are missing the time." );
                 continue;
+            }
+            
+            //  Print the result
+            for( int j = 0 ; j < sentenceWords.size( ) ; j++ ) {
+                List< String > thisWords = sentenceWords.get( j );
+                List< String > thisPOSs = sentencePOSs.get( j );
+                if( j != sentenceWithTime ) { continue; }
+                for( int k = 0 ; k < thisWords.size( ) ; k++ ) {
+                    //System.out.println( "\"" + i + "\",\"" + 
+                    //        thisWords.get( k ) + "\",\"" + thisPOSs.get( k ) + 
+                    //        "\",\"" + fact.rawTime + "\"" );
+                }
             }
             
             //  Get the times and words
             List< String > words = sentenceWords.get( sentenceWithTime );
+            if( words.size( ) < 1 ) { continue; }
             List< String > poss = sentencePOSs.get( sentenceWithTime );
-            if( words.size( ) > 100 ) { continue; }
             
-            //  Find the preposition
-            List< String > prepositions = new ArrayList( );
-            List< Integer > prepositionIndices = new ArrayList( );
-            for( int j = 0 ; j < words.size( ) ; j++ ) {
-                if( poss.get( j ).equals( "IN" ) ) {
-                    if( timeWords.contains( words.get( j ) ) ) { continue; }
-                    if( words.get( j ).toLowerCase( ).equals( "of" ) ) { continue; }
-                    prepositionIndices.add( j );
-                    prepositions.add( words.get( j ).toLowerCase( ) );
+            // We arent interested in sets that don't begin with a proper noun
+            if( ! poss.get( 0 ).equals( "NNP" ) ) { continue; }
+            
+            //  Collect the named entities and objects
+            String namedEntities = words.get( 0 ) + ",";
+            String objects = "";
+            int lastIndex = indexOf( words, timeWords );
+            for( int j = 1 ; j < lastIndex ; j++ ) {
+                
+                //  Add the term to the appropriate list
+                if( poss.get( j ).equals( "NNP" ) && 
+                        ( ! poss.get( j + 1 ).equals( "NN" ) ) && 
+                        ( objects.length( ) == 0 ) ) {
+                    namedEntities = namedEntities + words.get( j ) + ",";
+                } else if( poss.get( j ).equals( "NN" ) && 
+                        poss.get( j - 1 ).equals( "PRP$") &&
+                        ( objects.length( ) == 0 ) ) {
+                    namedEntities = namedEntities + words.get( j - 1 ) + " " + 
+                            words.get( j ) + ",";
+                } else if( poss.get( j ).equals( "NN" ) && 
+                        poss.get( j - 1 ).equals( "NNP" ) ) {
+                    objects = objects + words.get( j - 1 ) + " " + 
+                            words.get( j ) + "," ;
+                } else if( poss.get( j ).equals( "NN" ) ) {
+                    objects = objects + words.get( j ) + ",";
                 }
+                
             }
             
-            //  Find the nouns
-            List< String > nouns = new ArrayList( );
-            List< Integer > nounIndices = new ArrayList( );
-            for( int j = 0 ; j < words.size( ) ; j++ ) {
-                if( poss.get( j ).equals( "NN" ) || poss.get( j ).equals( "NNS" ) ) {
-                    if( timeWords.contains( words.get( j ) ) ) { continue; }
-                    nouns.add( words.get( j ).toLowerCase( ) );
-                    nounIndices.add( j );
-                }
-            }
-            
-            //  Find the verbs
-            List< String > verbs = new ArrayList( );
-            List< Integer > verbIndices = new ArrayList( );
-            for( int j = 0 ; j < words.size( ) ; j++ ) {
-                if( poss.get( j ).equals( "VB" ) || poss.get( j ).equals( "VBD" ) ) {
-                    if( timeWords.contains( words.get( j ) ) ) { continue; }
-                    verbs.add( words.get( j ).toLowerCase( ) );
-                    verbIndices.add( j );
-                }
-            }
-            
-            //  Find the people
-            List< String > people = new ArrayList( );
-            List< Integer > personIndices = new ArrayList( );
-            for( int j = 0 ; j < words.size( ) ; j++ ) {
-                if( allPeople.contains( words.get( j ).toLowerCase( ) ) ) {
-                    people.add( words.get( j ).toLowerCase( ) );
-                    personIndices.add( j );
-                }
-            }
-            
-            //  Only consider the simple ones
-            if( ( people.size( ) != 1 ) && ( people.size( ) != 2 ) ) { continue; }
-            if( prepositions.size( ) != 1 ) { continue; }
-            if( nouns.size( ) == 0 ) { continue; }
-            if( verbs.size( ) == 0 ) { continue; }
-            
-            //  Pack up the fact
-            String value = people.get( 0 );
-            if( people.size( ) == 2 ) { value = value + "," + people.get( 1 ); }
-            value = value + ":" + prepositions.get( 0 ) + ":" + verbs.get( 0 ) + ":" + nouns.get( 0 ) + ":" + fact.time;
-            fact.fact = value;
-            System.out.println( "\"" + fact.fact + "\" from \"" + fact.content + "\"" );
+            //  Create and save the fact
+            if( objects.length( ) == 0 ) { continue; }
+            namedEntities = namedEntities.substring( 0, namedEntities.length( ) - 1 );
+            objects = objects.substring( 0, objects.length( ) - 1 );
+            fact.fact = namedEntities + "-" + objects + "-" + fact.time;
+            System.out.println( "Fact = \"" + fact.fact + "\"" );
             
         }
         
-        //  Print out he facts
-        System.out.println( "FACTS:" );
+        //  Print out all the facts
+        System.out.println( "-- FACTS --" );
+        System.out.println( "Entities-Objects-Time,Content" );
         for( Fact fact : facts ) {
-            if( fact.fact != null ) {
-                System.out.println( "\"" + fact.fact + "\" from \"" + fact.content + "\"" );
-            }
+            if( fact.fact == null ) { continue; }
+            System.out.println( "\"" + fact.fact + "\",\"" + fact.content + "\"" );
         }
         
     }
@@ -432,6 +434,40 @@ public class CollectTimeAnnotations {
         
         //  Return false if we didn't find it
         return false;
+        
+        
+    }
+    
+    
+    /** Returns the index of first element of the second list in the first. */
+    private static int indexOf( List< String > list1, 
+            List< String > list2 ) {
+        
+        //  Not possible
+        if( list2.size( ) > list1.size( ) ) {
+            return -1;
+        }
+        
+        //  Find the second list in the first one
+        int n1 = list1.size( );
+        int n2 = list2.size( );
+        for( int i = 0 ; i < ( n1 - n2 ) ; i++ ) {
+            
+            //  See if we have all match
+            boolean allMatch = true;
+            for( int j = 0 ; j < n2 ; j++ ) {
+                allMatch = allMatch && ( list2.get( j ).equals( list1.get( i + j ) ) );
+            }
+            
+            //  We found it, return the index
+            if( allMatch ) {
+                return i;
+            }
+            
+        }
+        
+        //  Return -1 if we didn't find it
+        return -1;
         
         
     }
